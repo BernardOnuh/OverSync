@@ -85,7 +85,7 @@ const saveTransactionToHistory = (transaction: {
     };
 
     // Get existing transactions
-    const existing = localStorage.getItem('bridge_transactions');
+    const existing = localStorage.getItem('oversync_transactions_v2');
     const transactions = existing ? JSON.parse(existing) : [];
     
     // Add new transaction
@@ -97,7 +97,7 @@ const saveTransactionToHistory = (transaction: {
     }
     
     // Save back to localStorage
-    localStorage.setItem('bridge_transactions', JSON.stringify(transactions));
+    localStorage.setItem('oversync_transactions_v2', JSON.stringify(transactions));
     
     console.log('💾 Transaction saved to history:', historyTransaction);
   } catch (error) {
@@ -108,7 +108,7 @@ const saveTransactionToHistory = (transaction: {
 // Helper function to update transaction status in localStorage
 const updateTransactionStatus = (orderId: string, status: 'pending' | 'completed' | 'failed' | 'cancelled', additionalData?: any) => {
   try {
-    const existing = localStorage.getItem('bridge_transactions');
+    const existing = localStorage.getItem('oversync_transactions_v2');
     if (existing) {
       const transactions = JSON.parse(existing);
       const transactionIndex = transactions.findIndex((tx: any) => tx.id === orderId);
@@ -122,7 +122,7 @@ const updateTransactionStatus = (orderId: string, status: 'pending' | 'completed
         }
         
         // Save back to localStorage
-        localStorage.setItem('bridge_transactions', JSON.stringify(transactions));
+        localStorage.setItem('oversync_transactions_v2', JSON.stringify(transactions));
         
         console.log(`💾 Transaction status updated: ${orderId} -> ${status}`);
       } else {
