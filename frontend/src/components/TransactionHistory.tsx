@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Clock, CheckCircle, XCircle, ArrowRight, ExternalLink, RefreshCw } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, ArrowRight, ExternalLink, RefreshCw, Undo2 } from 'lucide-react';
 import { isTestnet } from '../config/networks';
+import RefundDialog from '../features/refund/RefundDialog';
+import type { Address } from 'viem';
 
 interface Transaction {
   id: string;
@@ -16,6 +18,15 @@ interface Transaction {
   ethTxHash?: string;
   stellarTxHash?: string;
   direction: 'eth-to-xlm' | 'xlm-to-eth';
+  // Refund support (eth-to-xlm only; populated when ETH is locked on-chain)
+  onChainOrderId?: string;       // bytes32 hex (v1) or uint256 string (v2)
+  htlcContractAddress?: string;  // contract holding the locked ETH
+  htlcContractMode?: 'v1-mainnet-htlc' | 'v2-escrow';
+  timelockUnixSeconds?: number;
+  amountWei?: string;
+  refundTxHash?: string;
+  refundedAt?: number;
+  networkMode?: 'mainnet' | 'testnet';
 }
 
 interface TransactionHistoryProps {
@@ -53,6 +64,7 @@ export default function TransactionHistory({ ethAddress, stellarAddress }: Trans
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed' | 'cancelled'>('all');
+  const [refundTarget, setRefundTarget] = useState<Transaction | null>(null);
 
   const loadFromStorage = useCallback((): Transaction[] => {
     try {
@@ -158,6 +170,40 @@ export default function TransactionHistory({ ethAddress, stellarAddress }: Trans
   const getStellarExplorerUrl = (txHash: string): string => {
     const network = isTestnet() ? 'testnet' : 'public';
     return `https://stellar.expert/explorer/${network}/tx/${txHash}`;
+  };
+
+  /**
+   * A pending ETH→XLM swap is "refundable" once we have all three on-chain
+   * coordinates and the order is still in pending/failed state. We do NOT
+   * gate on time here — RefundDialog itself enforces the timelock and only
+   * unlocks the button after it expires.
+   */
+  const canRefund = (tx: Transaction): boolean => {
+    return (
+      tx.direction === 'eth-to-xlm' &&
+      (tx.status === 'pending' || tx.status === 'failed') &&
+      !tx.refundedAt &&
+      !!tx.onChainOrderId &&
+      !!tx.htlcContractAddress &&
+      !!tx.timelockUnixSeconds
+    );
+  };
+
+  const handleRefunded = (orderId: string, refundHash: `0x${string}`) => {
+    setTransactions((prev) => {
+      const next = prev.map((tx) =>
+        tx.id === orderId
+          ? { ...tx, status: 'cancelled' as const, refundTxHash: refundHash, refundedAt: Date.now() }
+          : tx
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+    setRefundTarget(null);
   };
 
   return (
@@ -278,18 +324,56 @@ export default function TransactionHistory({ ethAddress, stellarAddress }: Trans
                 </div>
               </div>
 
-              <div className="mt-3 pt-3 border-t border-white/5">
+              <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
                 <div className="text-xs text-gray-400">
                   Transaction:
                   <span className="text-gray-300 font-mono ml-1">
                     {tx.txHash.substring(0, 10)}...{tx.txHash.substring(tx.txHash.length - 8)}
                   </span>
+                  {tx.refundedAt && tx.refundTxHash && (
+                    <span className="ml-3 text-emerald-400">
+                      Refunded ·
+                      <a
+                        href={getEtherscanUrl(tx.refundTxHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-1 underline"
+                      >
+                        view tx
+                      </a>
+                    </span>
+                  )}
                 </div>
+                {canRefund(tx) && (
+                  <button
+                    onClick={() => setRefundTarget(tx)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-xs font-semibold border border-amber-400/30 transition-colors"
+                    title="Refund your locked ETH from the HTLC contract once the timelock expires"
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                    Refund ETH
+                  </button>
+                )}
               </div>
             </div>
           ))
         )}
       </div>
+
+      {refundTarget && refundTarget.onChainOrderId && refundTarget.htlcContractAddress && refundTarget.timelockUnixSeconds && ethAddress && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <RefundDialog
+            userAddress={ethAddress as Address}
+            orderId={refundTarget.onChainOrderId}
+            timelockUnixSeconds={refundTarget.timelockUnixSeconds}
+            amountWei={refundTarget.amountWei ?? '0'}
+            contractMode={refundTarget.htlcContractMode ?? 'v1-mainnet-htlc'}
+            v1ContractAddress={refundTarget.htlcContractAddress as Address}
+            onClose={() => setRefundTarget(null)}
+            onRefunded={(hash) => handleRefunded(refundTarget.id, hash)}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   Memo
 } from '@stellar/stellar-sdk';
 import { isTestnet, getCurrentNetwork } from '../config/networks';
+import { parseHtlcReceipt } from '../lib/parseHtlcReceipt';
 
 // Web3 imports for contract interaction
 declare global {
@@ -59,6 +60,13 @@ const saveTransactionToHistory = (transaction: {
   ethTxHash?: string;
   stellarTxHash?: string;
   status?: 'pending' | 'completed' | 'failed' | 'cancelled';
+  // Optional on-chain metadata so TransactionHistory can offer a Refund button
+  // for ETH→XLM swaps once the timelock expires.
+  onChainOrderId?: string;
+  htlcContractAddress?: string;
+  htlcContractMode?: 'v1-mainnet-htlc' | 'v2-escrow';
+  timelockUnixSeconds?: number;
+  amountWei?: string;
 }) => {
   try {
     // Get current network info to determine correct network names
@@ -81,7 +89,13 @@ const saveTransactionToHistory = (transaction: {
       timestamp: Date.now(),
       ethTxHash: transaction.ethTxHash,
       stellarTxHash: transaction.stellarTxHash,
-      direction: transaction.direction
+      direction: transaction.direction,
+      onChainOrderId: transaction.onChainOrderId,
+      htlcContractAddress: transaction.htlcContractAddress,
+      htlcContractMode: transaction.htlcContractMode,
+      timelockUnixSeconds: transaction.timelockUnixSeconds,
+      amountWei: transaction.amountWei,
+      networkMode: (isTestnetMode ? 'testnet' : 'mainnet') as 'testnet' | 'mainnet',
     };
 
     // Get existing transactions
@@ -658,9 +672,25 @@ export default function BridgeForm({ ethAddress, stellarAddress }: BridgeFormPro
           
           console.log('✅ Transaction confirmed successfully!');
           console.log('🤖 Now triggering cross-chain processing...');
-          
 
-          
+          // Pull the full receipt (we may have only a {status} stub from the
+          // alt-path above). Logs are required to parse refund metadata.
+          let refundMeta: ReturnType<typeof parseHtlcReceipt> = null;
+          try {
+            const fullReceipt = await window.ethereum?.request({
+              method: 'eth_getTransactionReceipt',
+              params: [txHash],
+            });
+            refundMeta = parseHtlcReceipt(fullReceipt?.logs);
+            if (refundMeta) {
+              console.log('🛡️ Refund metadata captured:', refundMeta);
+            } else {
+              console.warn('⚠️ No HTLC OrderCreated event in receipt; refund button will be hidden for this tx.');
+            }
+          } catch (parseErr) {
+            console.warn('⚠️ Failed to load full receipt for refund metadata:', parseErr);
+          }
+
           // Save transaction to history immediately when ETH tx confirms
           saveTransactionToHistory({
             orderId: result.orderId,
@@ -671,7 +701,12 @@ export default function BridgeForm({ ethAddress, stellarAddress }: BridgeFormPro
             ethAddress: ethAddress,
             stellarAddress: stellarAddress,
             ethTxHash: txHash,
-            status: 'pending' // Initial status, will update after processing
+            status: 'pending', // Initial status, will update after processing
+            onChainOrderId: refundMeta?.orderId,
+            htlcContractAddress: refundMeta?.contractAddress,
+            htlcContractMode: refundMeta?.contractMode,
+            timelockUnixSeconds: refundMeta?.timelockUnixSeconds,
+            amountWei: refundMeta?.amountWei,
           });
           
           // Update status to cross-chain processing

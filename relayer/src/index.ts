@@ -11,6 +11,7 @@ import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { ethers } from 'ethers';
+import { startRefundWatchdog } from './refund-watchdog';
 
 // Load environment variables from root directory
 config({ path: resolve(process.cwd(), '../.env') });
@@ -1584,7 +1585,7 @@ const activeOrders = new Map();
       console.log('💰 XLM→ETH: Processing dedicated endpoint...', { orderId, stellarTxHash, stellarAddress, ethAddress: normalizedEthAddress });
       
       // Get stored order - BYPASSED FOR NOW (in-memory data lost on restart)
-      const storedOrder = activeOrders.get(orderId);
+      let storedOrder = activeOrders.get(orderId);
       // if (!storedOrder) {
       //   return res.status(404).json({
       //     error: 'Order not found',
@@ -1595,6 +1596,29 @@ const activeOrders = new Map();
       // Use provided data or defaults if order not found in memory
       const userEthAddress = storedOrder?.ethAddress || normalizedEthAddress;
       const orderAmount = storedOrder?.amount || '10'; // Default for testing
+
+      // 🛡️ Refund watchdog bookkeeping. We need:
+      //   - `xlmReceivedAt`: when the user committed XLM (used to compute staleness)
+      //   - `stellarTxHash`: the original payment, so the watchdog can size the refund
+      //   - `stellarAddress`: where to send the refund
+      // If the in-memory order was lost (relayer restart, etc.) we
+      // synthesize a minimal entry so the watchdog can still rescue it.
+      if (!storedOrder) {
+        storedOrder = {
+          orderId,
+          direction: 'xlm_to_eth',
+          ethAddress: normalizedEthAddress,
+          stellarAddress,
+          status: 'awaiting_eth_release',
+          created: new Date().toISOString(),
+          networkMode: requestNetwork,
+        };
+        activeOrders.set(orderId, storedOrder);
+      }
+      storedOrder.xlmReceivedAt = storedOrder.xlmReceivedAt ?? Date.now();
+      storedOrder.stellarTxHash = stellarTxHash;
+      if (stellarAddress) storedOrder.stellarAddress = stellarAddress;
+      storedOrder.networkMode = storedOrder.networkMode ?? requestNetwork;
       
       console.log('🎯 XLM→ETH: Sending ETH to user...', { userEthAddress, orderAmount });
       
@@ -2739,6 +2763,33 @@ const activeOrders = new Map();
   });
 
   console.log('✅ Escrow Factory endpoints registered');
+
+  // 🛡️ Refund watchdog: rescue stuck XLM→ETH orders that the request
+  // loop failed to refund (e.g. user closed the tab, RPC outage past
+  // our retry budget). Best-effort, never throws into the event loop.
+  try {
+    const watchdogNetwork: 'mainnet' | 'testnet' =
+      (DEFAULT_NETWORK_MODE === 'mainnet' ? 'mainnet' : 'testnet');
+    const watchdogHorizon =
+      NETWORK_CONFIG[watchdogNetwork].stellar.horizonUrl;
+    const watchdogSecret =
+      watchdogNetwork === 'mainnet'
+        ? (process.env.RELAYER_STELLAR_SECRET_MAINNET || process.env.RELAYER_STELLAR_SECRET)
+        : (process.env.RELAYER_STELLAR_SECRET_TESTNET || process.env.RELAYER_STELLAR_SECRET);
+
+    if (watchdogSecret) {
+      startRefundWatchdog({
+        horizonUrl: watchdogHorizon,
+        refundSecret: watchdogSecret,
+        networkMode: watchdogNetwork,
+        activeOrders,
+      });
+    } else {
+      console.warn('⚠️ Refund watchdog disabled: RELAYER_STELLAR_SECRET not configured.');
+    }
+  } catch (watchdogErr) {
+    console.error('❌ Failed to start refund watchdog:', watchdogErr);
+  }
 
   // Start HTTP server
   const server = app.listen(RELAYER_CONFIG.port, () => {
