@@ -405,38 +405,49 @@ input[type=number] {
   z-index: 1000;
   display: grid;
   place-items: center;
+  isolation: isolate;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 50% 62%, rgba(0, 226, 255, 0.15), transparent 32%),
-    linear-gradient(145deg, #02030a 0%, #060a18 44%, #0b1026 74%, #030306 100%);
+    linear-gradient(180deg, rgba(6, 13, 32, 0.98) 0%, rgba(2, 3, 10, 1) 58%, rgba(1, 2, 6, 1) 100%),
+    linear-gradient(122deg, transparent 0 30%, rgba(0, 226, 255, 0.12) 42%, transparent 56%),
+    linear-gradient(238deg, transparent 0 34%, rgba(142, 160, 255, 0.12) 48%, transparent 62%),
+    repeating-linear-gradient(90deg, rgba(114, 226, 255, 0.035) 0 1px, transparent 1px 96px),
+    repeating-linear-gradient(0deg, rgba(142, 160, 255, 0.026) 0 1px, transparent 1px 48px),
+    #02030a;
   animation: intro-screen-out 0.5s ease 3.85s forwards;
 }
 
 .intro-screen::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -16% -8% -6%;
+  z-index: 0;
   background:
-    linear-gradient(105deg, transparent 0 42%, rgba(255, 255, 255, 0.13) 48%, transparent 55% 100%),
-    linear-gradient(90deg, transparent 0 18%, rgba(0, 226, 255, 0.09) 36%, transparent 54%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 92px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 46px);
-  opacity: 0.5;
-  transform: perspective(760px) rotateX(64deg) translateY(24%);
+    repeating-linear-gradient(115deg, transparent 0 34px, rgba(0, 226, 255, 0.09) 35px 36px, transparent 37px 108px),
+    repeating-linear-gradient(65deg, transparent 0 58px, rgba(142, 160, 255, 0.06) 59px 60px, transparent 61px 148px),
+    linear-gradient(90deg, transparent 0 16%, rgba(0, 226, 255, 0.11) 32%, transparent 54% 100%);
+  opacity: 0.86;
+  transform: perspective(820px) rotateX(62deg) translateY(22%);
   transform-origin: center bottom;
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.72) 18%, rgba(0, 0, 0, 0.95) 72%, transparent 100%);
 }
 
 .intro-screen::after {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -10%;
+  z-index: 0;
   background:
-    radial-gradient(ellipse at center, transparent 0 48%, rgba(0, 0, 0, 0.56) 78%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.36));
-  opacity: 0.62;
+    linear-gradient(102deg, transparent 0 24%, rgba(255, 255, 255, 0.09) 30%, transparent 36% 100%),
+    linear-gradient(78deg, transparent 0 44%, rgba(0, 226, 255, 0.1) 50%, transparent 58% 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.42));
+  opacity: 0.72;
+  animation: intro-field-shift 5.2s linear infinite;
 }
 
 .intro-card {
   position: relative;
+  z-index: 1;
   display: grid;
   justify-items: center;
   gap: 1rem;
@@ -661,6 +672,15 @@ input[type=number] {
   100% {
     opacity: 0;
     transform: translateX(48%);
+  }
+}
+
+@keyframes intro-field-shift {
+  from {
+    transform: translateX(-2%);
+  }
+  to {
+    transform: translateX(2%);
   }
 }
 
