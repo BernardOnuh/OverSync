@@ -37,6 +37,7 @@ function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'bridge' | 'history'>('bridge');
+  const [showIntro, setShowIntro] = useState(true);
 
   // Freighter hook usage
   const {
@@ -50,6 +51,15 @@ function App() {
 
   // Toast hook
   const toast = useToast();
+
+  useEffect(() => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timer = window.setTimeout(() => {
+      setShowIntro(false);
+    }, prefersReducedMotion ? 250 : 2850);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // Auto-connect MetaMask if previously connected
   useEffect(() => {
@@ -169,6 +179,25 @@ function App() {
 
   return (
     <div className="app-shell min-h-screen text-white flex flex-col">
+      {showIntro && (
+        <div className="intro-screen" aria-label="OverSync loading">
+          <div className="intro-card">
+            <div className="intro-logo-wrap">
+              <img
+                src="/images/oversync-logo.png"
+                alt="OverSync"
+                className="intro-logo"
+              />
+            </div>
+            <div className="intro-copy">
+              <p>OverSync</p>
+              <span>Fusion Rail</span>
+            </div>
+            <div className="intro-loader" />
+          </div>
+        </div>
+      )}
+
       {/* Top Navigation */}
       <nav className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#071012]/70 px-4 py-3 backdrop-blur-2xl md:px-8">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
