@@ -13,6 +13,7 @@ import { isMainnetEnabled } from './config/networks'
 import EvidenceExportAction from './components/EvidenceExportAction'
 import NetworkMismatchBanner from './components/NetworkMismatchBanner'
 import MainnetVersionBanner from './components/MainnetVersionBanner'
+import DeploymentSelfCheck from './components/DeploymentSelfCheck'
 import LaunchReadinessSurface from './pages/LaunchReadinessSurface'
 import BackendStatusBanner from './components/BackendStatusBanner'
 import { useBackendStatus } from './lib/useBackendStatus'
@@ -580,6 +581,11 @@ function App() {
           <span className="text-base">X</span>
         </a>
       </div>
+
+      {/* Deployment Self-Check - visible in development or when debug mode enabled */}
+      {import.meta.env.DEV || (import.meta as any).env?.VITE_ENABLE_DEBUG_MODE === 'true' ? (
+        <DeploymentSelfCheck />
+      ) : null}
 
       {/* Toast Container */}
       <ToastContainer
